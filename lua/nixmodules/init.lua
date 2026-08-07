@@ -1,4 +1,7 @@
----Provides functions for inspecting nixos modules more easily.
+---@brief
+--- Provides functions for inspecting nixos modules more easily.
+
+---@nodoc
 ---@class nixmodules
 ---@field config nixmodules.config
 local M = {}

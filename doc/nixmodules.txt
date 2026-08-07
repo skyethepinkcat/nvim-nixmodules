@@ -1,11 +1,7 @@
 ==============================================================================
 NIXMODULES                                                        *nixmodules*
 
-*nixmodules*
-    Provides functions for inspecting nixos modules more easily.
-
-    Fields: ~
-      • {config}  (`nixmodules.config`) See |nixmodules.config|
+Provides functions for inspecting nixos modules more easily.
 
 *nixmodules.config*
     Configuration options for nixmodules.
@@ -30,7 +26,7 @@ setup({opts})                                             *nixmodules.setup()*
       • {opts}  (`nixmodules.config?`) See |nixmodules.config|
 
     Return: ~
-        (`nixmodules`) See |nixmodules|
+        (`nixmodules`)
 
 get_option_path()                               *nixmodules.get_option_path()*
     Return the option or config path under the cursor as a list of strings.
@@ -49,9 +45,9 @@ nix_eval({flake_output}, {apply})                      *nixmodules.nix_eval()*
 
     Parameters: ~
       • {flake_output}  (`string`) The flake output to evaluate
-      • {apply}         (`string?`) What to give to --apply, if nil ignores
-                        apply. Using a function like (x: x) will allow you to
-                        operate on the output easily.
+      • {apply}         (`string?`) What to give to --apply. Using a function
+                        like (x: x) will allow you to operate on the output
+                        easily.
 
     Return (multiple): ~
         (`vim.SystemCompleted`) the result of the command
