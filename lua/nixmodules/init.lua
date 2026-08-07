@@ -119,7 +119,17 @@ function M.get_option_path()
 	local root = node:tree():root()
 
 	-- TODO Needs to consider non-config paths
-	return concat_nodes(root, node, { "config" })
+	local path = concat_nodes(root, node, {})
+
+	-- Reasonable "top level" paths we don't have to edit.
+	local top_level_paths = {"options", "config", "imports"}
+
+	if vim.tbl_contains(top_level_paths, path[1]) then
+		return path
+	else
+		-- Slap config onto the top level.
+		return vim.list_extend({"config"}, path)
+	end
 end
 
 --- Prints the config path under the cursor with vim.notify
