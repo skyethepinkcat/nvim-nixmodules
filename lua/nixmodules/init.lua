@@ -1,14 +1,26 @@
 --- @class nixmodules
+--- @field config nixmodules.config
+local M = {}
+
+--- @class nixmodules.config
 --- @field output string? The flake output path to use.
 --- @field nix_path string The path to the nix binary.
 --- @field flake string The path to the nix flake.
 --- @field jq_path string The path to the jq executable.
-local M = {
-	output = nil,
-	nix_path = "/run/current-system/sw/bin/nix",
-	flake = ".",
-	jq_path = "jq",
-}
+M.config = {}
+
+---Setup with opts.
+---@param opts table?
+---@return nixmodules
+function M.setup(opts)
+	M.config = assert(vim.tbl_deep_extend("keep", opts or {}, {
+		output = nil,
+		nix_path = "nix",
+		flake = ".",
+		jq_path = "jq",
+	}))
+	return M
+end
 
 ---Debug function, outputs a table as a string.
 ---@return string
@@ -106,7 +118,7 @@ function M.nix_eval(flake_output, apply)
 	local result = vim.system({
 		"bash",
 		"-c",
-		string.format("%s eval %s#%s %s --json", M.nix_path, M.flake, flake_output, apply_command),
+		string.format("%s eval %s#%s %s --json", M.config.nix_path, M.config.flake, flake_output, apply_command),
 	}, { text = true }):wait()
 
 	if result.code ~= 0 then
@@ -115,7 +127,7 @@ function M.nix_eval(flake_output, apply)
 		return vim.system({
 			"bash",
 			"-c",
-			string.format("%s eval %s#%s %s", M.nix_path, M.flake, flake_output, apply_command),
+			string.format("%s eval %s#%s %s", M.config.nix_path, M.config.flake, flake_output, apply_command),
 		}, { text = true }):wait()
 	end
 	return result
@@ -168,7 +180,7 @@ function M.eval_config()
 		local result = M.nix_eval(string.format(M.output .. "." .. M.get_option_path()), nil)
 		if result.code == 0 then
 			local buf = vim.api.nvim_create_buf(false, true) -- listed=false, scratch=true
-			local json_process = vim.system({ M.jq_path }, { text = true })
+			local json_process = vim.system({ M.config.jq_path }, { text = true })
 			json_process:write(result.stdout)
 			local formatted_json = assert(json_process:wait().stdout)
 			vim.api.nvim_open_win(buf, true, window_config())

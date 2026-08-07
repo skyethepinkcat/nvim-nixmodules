@@ -11,13 +11,11 @@
     inputs@{ flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
-        inputs.nixvim.flakeModules.default
         # To import an internal flake module: ./other.nix
         # To import an external flake module:
         #   1. Add foo to inputs
         #   2. Add foo as a parameter to the outputs function
         #   3. Add here: foo.flakeModule
-        ./flake
       ];
       systems = [
         "aarch64-linux"
