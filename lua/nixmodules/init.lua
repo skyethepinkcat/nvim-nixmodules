@@ -4,9 +4,11 @@ local M = {}
 
 --- @class nixmodules.config
 --- @field output string? The flake output path to use.
---- @field nix_path string The path to the nix binary.
---- @field flake string The path to the nix flake.
---- @field jq_path string The path to the jq executable.
+--- @field nix_path string The path to the nix binary. Defaults to `nix`.
+--- @field flake string The path to the nix flake. Defaults to `.`.
+--- @field jq_path string The path to the jq executable. Defaults to `jq`.
+--- @field command_timeout integer MS to wait until killing nix eval. Defaults to 1 minute since nix
+--  commands can take a long time.
 M.config = {}
 
 ---Setup with opts.
@@ -18,6 +20,7 @@ function M.setup(opts)
 		nix_path = "nix",
 		flake = ".",
 		jq_path = "jq",
+		command_timeout = 1000 * 60, -- One minute timeout by default
 	}))
 	return M
 end
@@ -53,15 +56,15 @@ local function add_dot(path)
 end
 
 --- @param node TSNode
---- @param fullpath string
-local function print_node(node, fullpath)
+--- @return string[]
+local function print_node(node)
 	if node:type() == "binding" then
 		local attrpath = node:field("attrpath")[1]
 		if attrpath ~= nil then
-			return add_dot(fullpath) .. ts.get_node_text(attrpath, 0, {})
+			return { ts.get_node_text(attrpath, 0, {}) }
 		end
 	end
-	return fullpath
+	return {}
 end
 
 --- Check if this node is parseable.
@@ -95,39 +98,39 @@ end
 --- Turns recurses through a list of nodes and turns them into a single nix attrset path.
 --- @param root TSNode
 --- @param dest TSNode
---- @param fullPath string
---- @return string
+--- @param fullPath string[]
+--- @return string[]
 local function concat_nodes(root, dest, fullPath)
 	-- Check if we reach a type we can't parse, and exit if so.
 	if not check_parseable(root, dest) then
 		return fullPath
 	elseif root:id() == dest:id() then
-		return print_node(root, fullPath)
+		return vim.list_extend(fullPath, print_node(root))
 	else
-		return concat_nodes(assert(root:child_with_descendant(dest)), dest, print_node(root, fullPath))
+		return concat_nodes(assert(root:child_with_descendant(dest)), dest, vim.list_extend(fullPath, print_node(root)))
 	end
 end
 
---- Return the option or config path under the cursor as a string.
---- @return string
+--- Return the option or config path under the cursor as a list of strings.
+--- @return string[]
 function M.get_option_path()
 	local cur = api.nvim_win_get_cursor(0)
 	local node = assert(ts.get_node(cur))
 	local root = node:tree():root()
 
 	-- TODO Needs to consider non-config paths
-	return concat_nodes(root, node, "config")
+	return concat_nodes(root, node, { "config" })
 end
 
 --- Prints the config path under the cursor with vim.notify
 function M.print_config_path()
 	local path = M.get_option_path()
-	vim.notify(path)
+	vim.notify(table.concat(path, "."))
 end
 
 --- Prints the config path under the cursor and copies to the clipboard.
 function M.copy_config_path()
-	local path = M.get_option_path()
+	local path = table.concat(M.get_option_path(), ".")
 	vim.notify("Copied: " .. path)
 	vim.fn.setreg("+", path)
 end
@@ -138,26 +141,34 @@ end
 ---@param apply string?
 ---@return vim.SystemCompleted, boolean
 function M.nix_eval(flake_output, apply)
-	local apply_command = ""
+	local apply_command = {}
 	if apply ~= nil and apply ~= "" then
-		apply_command = string.format('--apply "%s"', apply)
+		apply_command = { "--apply", apply }
 	end
 
-	local result = vim.system({
-		"bash",
-		"-c",
-		string.format("%s eval %s#%s %s --json", M.config.nix_path, M.config.flake, flake_output, apply_command),
-	}, { text = true }):wait()
+	local result = vim.system(
+		vim.list_extend({
+			M.config.nix_path,
+			"eval",
+			string.format("%s#%s", M.config.flake, flake_output),
+			"--json",
+		}, apply_command),
+		{ text = true, timeout = M.config.command_timeout }
+	):wait()
 
 	if result.code ~= 0 then
 		-- See https://github.com/NixOS/nix/issues/11576
 		vim.notify("Unable to evaluate as JSON, trying regular eval...", vim.log.levels.WARN)
-		return vim.system({
-			"bash",
-			"-c",
-			string.format("%s eval %s#%s %s", M.config.nix_path, M.config.flake, flake_output, apply_command),
-		}, { text = true }):wait(),
-			false
+		return vim.system(
+					vim.list_extend({
+						M.config.nix_path,
+						"eval",
+						string.format("%s#%s", M.config.flake, flake_output),
+						apply_command,
+					}, apply_command),
+					{ text = true, timeout = M.config.command_timeout }
+				):wait(),
+				false
 	end
 	return result, true
 end
@@ -200,19 +211,25 @@ local function window_config()
 end
 
 ---Evaluates a config path under the cursor and prints to a floating buffer.
---If possible, it will give formatted json, but otherwise it falls back to regular eval output.
+--	If possible, it will give formatted json, but otherwise it falls back to regular eval output.
 function M.eval_config()
 	if M.output == nil then
 		M.set_output(nil)
 	end
 	if M.output ~= nil then
-		local result, json = M.nix_eval(string.format(M.output .. "." .. M.get_option_path()), nil)
+		local option_path = M.get_option_path()
+		if #option_path <= 1 then
+			vim.notify("Cowardly refusing to evaluate a shallow option path.", vim.log.levels.WARN)
+			return
+		end
+		local result, json =
+				M.nix_eval(string.format(M.output), string.format("(x: x.%s)", table.concat(option_path, ".")))
 		if result.code == 0 then
-			local buf = vim.api.nvim_create_buf(false, true) -- listed=false, scratch=true
+			local buf = vim.api.nvim_create_buf(false, true)
 			local lines
 			if json then
 				lines =
-					assert(vim.system({ M.config.jq_path, "." }, { text = true, stdin = result.stdout }):wait().stdout)
+						assert(vim.system({ M.config.jq_path, "." }, { text = true, stdin = result.stdout }):wait().stdout)
 			else
 				lines = assert(result.stdout)
 			end
