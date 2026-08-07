@@ -1,0 +1,75 @@
+==============================================================================
+NIXMODULES                                                        *nixmodules*
+
+*nixmodules*
+    Provides functions for inspecting nixos modules more easily.
+
+    Fields: ~
+      • {config}  (`nixmodules.config`) See |nixmodules.config|
+
+*nixmodules.config*
+    Configuration options for nixmodules.
+
+    Fields: ~
+      • {output}           (`string?`) The flake output path to use.
+      • {nix_path}         (`string`) The path to the nix binary. Defaults to
+                           nix.
+      • {flake}            (`string`) The path to the nix flake. Defaults to
+                           ..
+      • {jq_path}          (`string`) The path to the jq executable. Defaults
+                           to jq.
+      • {command_timeout}  (`integer`) MS to wait until killing nix eval.
+                           Defaults to 1 minute since nix commands can take a
+                           long time.
+
+
+setup({opts})                                             *nixmodules.setup()*
+    Initiate the plugin with opts.
+
+    Parameters: ~
+      • {opts}  (`nixmodules.config?`) See |nixmodules.config|
+
+    Return: ~
+        (`nixmodules`) See |nixmodules|
+
+get_option_path()                               *nixmodules.get_option_path()*
+    Return the option or config path under the cursor as a list of strings.
+
+    Return: ~
+        (`string[]`)
+
+print_config_path()                           *nixmodules.print_config_path()*
+    Prints the config path under the cursor with vim.notify
+
+copy_config_path()                             *nixmodules.copy_config_path()*
+    Prints the config path under the cursor and copies to the clipboard
+
+nix_eval({flake_output}, {apply})                      *nixmodules.nix_eval()*
+    Runs nix eval using the given flake output and apply code.
+
+    Parameters: ~
+      • {flake_output}  (`string`) The flake output to evaluate
+      • {apply}         (`string?`) What to give to --apply, if nil ignores
+                        apply. Using a function like (x: x) will allow you to
+                        operate on the output easily.
+
+    Return (multiple): ~
+        (`vim.SystemCompleted`) the result of the command
+        (`boolean`) Whether or not the returned stdout is JSON.
+
+set_output({setting})                                *nixmodules.set_output()*
+    Sets the flake output to use, prompting the user if parameter is nil
+
+    Parameters: ~
+      • {setting}  (`string?`)
+
+    Return: ~
+        (`string`)
+
+eval_config()                                       *nixmodules.eval_config()*
+    Evaluates a config path under the cursor and prints to a floating buffer.
+    If possible, it will give formatted json, but otherwise it falls back to
+    regular eval output.
+
+
+ vim:tw=78:ts=8:sw=4:sts=4:et:ft=help:norl:

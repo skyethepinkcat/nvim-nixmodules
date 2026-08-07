@@ -1,18 +1,19 @@
---- @class nixmodules
---- @field config nixmodules.config
+---Provides functions for inspecting nixos modules more easily.
+---@class nixmodules
+---@field config nixmodules.config
 local M = {}
 
+--- Configuration options for nixmodules.
 --- @class nixmodules.config
 --- @field output string? The flake output path to use.
---- @field nix_path string The path to the nix binary. Defaults to `nix`.
---- @field flake string The path to the nix flake. Defaults to `.`.
---- @field jq_path string The path to the jq executable. Defaults to `jq`.
---- @field command_timeout integer MS to wait until killing nix eval. Defaults to 1 minute since nix
---  commands can take a long time.
+--- @field nix_path string The path to the nix binary. Defaults to nix.
+--- @field flake string The path to the nix flake. Defaults to ..
+--- @field jq_path string The path to the jq executable. Defaults to jq.
+--- @field command_timeout integer MS to wait until killing nix eval. Defaults to 1 minute since nix commands can take a long time.
 M.config = {}
 
----Setup with opts.
----@param opts table?
+---Initiate the plugin with opts.
+---@param opts nixmodules.config?
 ---@return nixmodules
 function M.setup(opts)
 	M.config = assert(vim.tbl_deep_extend("keep", opts or {}, {
@@ -47,16 +48,9 @@ local api = vim.api
 
 local ts = vim.treesitter
 
---- @param path string
-local function add_dot(path)
-	if path == "" then
-		return path
-	end
-	return path .. "."
-end
-
---- @param node TSNode
---- @return string[]
+---Converts a node to its nix attrset path
+---@param node TSNode
+---@return string[]
 local function print_node(node)
 	if node:type() == "binding" then
 		local attrpath = node:field("attrpath")[1]
@@ -67,10 +61,10 @@ local function print_node(node)
 	return {}
 end
 
---- Check if this node is parseable.
---- @param node TSNode
---- @param dest TSNode
---- @return boolean
+---Check if this node is parseable
+---@param node TSNode
+---@param dest TSNode
+---@return boolean
 local function check_parseable(node, dest)
 	local invalid_types = { "list_expression" }
 	if vim.tbl_contains(invalid_types, node:type()) then
@@ -95,11 +89,11 @@ local function check_parseable(node, dest)
 	return true
 end
 
---- Turns recurses through a list of nodes and turns them into a single nix attrset path.
---- @param root TSNode
---- @param dest TSNode
---- @param fullPath string[]
---- @return string[]
+---Turns recurses through a list of nodes and turns them into a single nix attrset path.
+---@param root TSNode Current node, should start with the root of the tree.
+---@param dest TSNode Final node, should be what is under the cursor.
+---@param fullPath string[] Parts of the current path.
+---@return string[]
 local function concat_nodes(root, dest, fullPath)
 	-- Check if we reach a type we can't parse, and exit if so.
 	if not check_parseable(root, dest) then
@@ -122,13 +116,13 @@ function M.get_option_path()
 	local path = concat_nodes(root, node, {})
 
 	-- Reasonable "top level" paths we don't have to edit.
-	local top_level_paths = {"options", "config", "imports"}
+	local top_level_paths = { "options", "config", "imports" }
 
 	if vim.tbl_contains(top_level_paths, path[1]) then
 		return path
 	else
 		-- Slap config onto the top level.
-		return vim.list_extend({"config"}, path)
+		return vim.list_extend({ "config" }, path)
 	end
 end
 
@@ -138,18 +132,19 @@ function M.print_config_path()
 	vim.notify(table.concat(path, "."))
 end
 
---- Prints the config path under the cursor and copies to the clipboard.
+--- Prints the config path under the cursor and copies to the clipboard
 function M.copy_config_path()
 	local path = table.concat(M.get_option_path(), ".")
 	vim.notify("Copied: " .. path)
 	vim.fn.setreg("+", path)
 end
 
----Takes a given flake output and an option apply string and returns the result of nix eval. Returns
----SystemCompleted and a boolean indicating whether the output is JSON.
----@param flake_output string
----@param apply string?
----@return vim.SystemCompleted, boolean
+---Runs nix eval using the given flake output and apply code.
+---@param flake_output string The flake output to evaluate
+---@param apply string? What to give to --apply.
+---  Using a function like (x: x) will allow you to operate on the output easily.
+---@return vim.SystemCompleted result the result of the command
+---@return boolean json Whether or not the returned stdout is JSON.
 function M.nix_eval(flake_output, apply)
 	local apply_command = {}
 	if apply ~= nil and apply ~= "" then
@@ -183,7 +178,7 @@ function M.nix_eval(flake_output, apply)
 	return result, true
 end
 
----Sets the flake output to use, prompting the user if parameter is nil.
+---Sets the flake output to use, prompting the user if parameter is nil
 ---@param setting string?
 ---@return string
 function M.set_output(setting)
@@ -221,7 +216,7 @@ local function window_config()
 end
 
 ---Evaluates a config path under the cursor and prints to a floating buffer.
---	If possible, it will give formatted json, but otherwise it falls back to regular eval output.
+---If possible, it will give formatted json, but otherwise it falls back to regular eval output.
 function M.eval_config()
 	if M.output == nil then
 		M.set_output(nil)
