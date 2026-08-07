@@ -64,15 +64,42 @@ local function print_node(node, fullpath)
 	return fullpath
 end
 
+--- Check if this node is parseable.
+--- @param node TSNode
+--- @param dest TSNode
+--- @return boolean
+local function check_parseable(node, dest)
+	local invalid_types = { "list_expression" }
+	if vim.tbl_contains(invalid_types, node:type()) then
+		return false
+	end
+
+	local body_types = { "let_expression", "function_expression" }
+	if vim.tbl_contains(body_types, node:type()) then
+		local child = assert(node:child_with_descendant(dest))
+		local body = node:field("body")
+
+		if body == nil or body[1] == nil then
+			return false
+		end
+
+		-- If we aren't in the body of a function or let expression, its not possible to go
+		-- deeper
+		if not child:equal(body[1]) then
+			return false
+		end
+	end
+	return true
+end
+
 --- Turns recurses through a list of nodes and turns them into a single nix attrset path.
 --- @param root TSNode
 --- @param dest TSNode
 --- @param fullPath string
 --- @return string
 local function concat_nodes(root, dest, fullPath)
-	local invalid_types = { "list_expression", "let_expression" }
 	-- Check if we reach a type we can't parse, and exit if so.
-	if vim.tbl_contains(invalid_types, root:type()) then
+	if not check_parseable(root, dest) then
 		return fullPath
 	elseif root:id() == dest:id() then
 		return print_node(root, fullPath)
@@ -105,10 +132,11 @@ function M.copy_config_path()
 	vim.fn.setreg("+", path)
 end
 
----Takes a given flake output and an option apply string and returns the result of nix eval.
+---Takes a given flake output and an option apply string and returns the result of nix eval. Returns
+---SystemCompleted and a boolean indicating whether the output is JSON.
 ---@param flake_output string
 ---@param apply string?
----@return vim.SystemCompleted
+---@return vim.SystemCompleted, boolean
 function M.nix_eval(flake_output, apply)
 	local apply_command = ""
 	if apply ~= nil and apply ~= "" then
@@ -128,9 +156,10 @@ function M.nix_eval(flake_output, apply)
 			"bash",
 			"-c",
 			string.format("%s eval %s#%s %s", M.config.nix_path, M.config.flake, flake_output, apply_command),
-		}, { text = true }):wait()
+		}, { text = true }):wait(),
+			false
 	end
-	return result
+	return result, true
 end
 
 ---Sets the flake output to use, prompting the user if parameter is nil.
@@ -177,15 +206,19 @@ function M.eval_config()
 		M.set_output(nil)
 	end
 	if M.output ~= nil then
-		local result = M.nix_eval(string.format(M.output .. "." .. M.get_option_path()), nil)
+		local result, json = M.nix_eval(string.format(M.output .. "." .. M.get_option_path()), nil)
 		if result.code == 0 then
 			local buf = vim.api.nvim_create_buf(false, true) -- listed=false, scratch=true
-			local json_process = vim.system({ M.config.jq_path }, { text = true })
-			json_process:write(result.stdout)
-			local formatted_json = assert(json_process:wait().stdout)
+			local lines
+			if json then
+				lines =
+					assert(vim.system({ M.config.jq_path, "." }, { text = true, stdin = result.stdout }):wait().stdout)
+			else
+				lines = assert(result.stdout)
+			end
 			vim.api.nvim_open_win(buf, true, window_config())
 
-			vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(formatted_json, "\n"))
+			vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(lines, "\n"))
 			vim.api.nvim_set_option_value("filetype", "json", { buf = buf })
 			vim.api.nvim_set_option_value("readonly", true, { buf = buf })
 			vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
