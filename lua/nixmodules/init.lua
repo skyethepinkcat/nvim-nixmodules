@@ -186,7 +186,7 @@ end
 ---@return string
 function M.set_output(setting)
 	if setting == nil then
-		vim.ui.input({ prompt = "Enter the nix output to use.", scope = "project" }, function(input)
+		vim.ui.input({ prompt = "Enter the nix output to use.", scope = "project", default = M.output or "nixosConfigurations.x86_64-linux.default" }, function(input)
 			M.output = input
 		end)
 	else
