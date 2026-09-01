@@ -181,12 +181,27 @@ function M.nix_eval(flake_output, apply)
 	return result, true
 end
 
+local function default_flake()
+	local system = vim.uv.os_uname()["sysname"]
+	local os = ""
+	if system == "Darwin" then
+		os = "darwinConfigurations"
+	else
+		os = "nixosConfigurations" end
+	local hostname = vim.uv.os_gethostname()
+	return string.format("%s.%s", os, hostname)
+end
+
 ---Sets the flake output to use, prompting the user if parameter is nil
 ---@param setting string?
 ---@return string
 function M.set_output(setting)
 	if setting == nil then
-		vim.ui.input({ prompt = "Enter the nix output to use.", scope = "project", default = M.output or "nixosConfigurations.x86_64-linux.default" }, function(input)
+		vim.ui.input({
+			prompt = "Enter the nix output to use.",
+			scope = "project",
+			default = M.output or default_flake(),
+		}, function(input)
 			M.output = input
 		end)
 	else

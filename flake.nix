@@ -8,8 +8,7 @@
   };
 
   outputs =
-    inputs@{ flake-parts, ... }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+    inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         # To import an internal flake module: ./other.nix
         # To import an external flake module:
